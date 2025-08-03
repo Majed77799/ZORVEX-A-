@@ -1,0 +1,74 @@
+name: Deploy Zorvex AI
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  setup-env:
+    name: Pull env from Vercel
+    runs-on: ubuntu-latest
+    outputs:
+      env-file: ${{ steps.pull-env.outputs.env-file }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@^29
+
+      - name: Pull production env
+        id: pull-env
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          vercel env pull .env.prod --environment=production --yes
+          echo "::set-output name=env-file::.env.prod"
+
+  build-and-deploy-frontend:
+    name: Frontend → Vercel
+    runs-on: ubuntu-latest
+    needs: setup-env
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Load env
+        run: cp ${{ needs.setup-env.outputs.env-file }} frontend/.env.production
+
+      - name: Install & build frontend
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      - name: Deploy frontend
+        uses: amondnet/vercel-action@v21
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          working-directory: ./frontend
+          prod: true
+
+  deploy-backend:
+    name: Backend → Vercel
+    runs-on: ubuntu-latest
+    needs: setup-env
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Load env for backend
+        run: cp ${{ needs.setup-env.outputs.env-file }} backend/.env
+
+      - name: Install backend deps
+        run: |
+          cd backend
+          npm install
+
+      - name: Deploy backend
+        uses: amondnet/vercel-action@v21
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_BACKEND_PROJECT_ID }}
+          working-directory: ./backend
+          prod: true
